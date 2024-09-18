@@ -1,0 +1,47 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'centos-latest'
+
+variables:
+  imageName: 'myapp'  # Name of your container app
+  acrName: '<ACR_NAME>'  # Azure Container Registry name
+  resourceGroup: '<RESOURCE_GROUP>'
+  containerAppName: '<CONTAINER_APP_NAME>'
+  environmentName: '<ENVIRONMENT_NAME>'
+  location: '<LOCATION>'  # e.g., eastus
+
+steps:
+- task: DockerInstaller@0
+  inputs:
+    dockerVersion: 'latest'
+
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: '<Your-Azure-Subscription>'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "Logging into ACR..."
+      az acr login --name $(acrName)
+      
+      echo "Building the Docker image..."
+      docker build -t $(acrName).azurecr.io/$(imageName):$(Build.BuildId) .
+      
+      echo "Pushing the image to ACR..."
+      docker push $(acrName).azurecr.io/$(imageName):$(Build.BuildId)
+
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: '<Your-Azure-Subscription>'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "Deploying to Azure Container Apps..."
+      az containerapp update \
+        --name $(containerAppName) \
+        --resource-group $(resourceGroup) \
+        --image $(acrName).azurecr.io/$(imageName):$(Build.BuildId) \
+        --environment $(environmentName) \
+        --location $(location)
